@@ -1,13 +1,17 @@
+# Primary Author:
+# Secondary Author: Corinne Jackson
+# Last edited: 2022-11-
+
 library(tidyverse)
 library(vegan)
 library(tmap)
-data("World")
 library(gridExtra)
-library(vegan)
+library(dplyr)
+data("World")
 
 ######################################################
 
-# downloaded on September 26th 2022
+# Downloaded on September 26th 2022
 croc <- read_tsv("bold_data.txt")
 
 # Start with a quick overview of the information available. We start with the names and a summary of the columns in this data frame. 
@@ -16,30 +20,17 @@ summary(croc)
 names(croc)
 
 # We then look at some of the variables of interest. Here we find that there are no recorded values of 'habitat' (all values are NA) so this variable will be discarded
-length(unique(croc$habitat))
-length(unique(croc$bin_uri))
-length(unique(croc$species_name))
-length(unique(croc$lat))
-length(unique(croc$lon))
-length(unique(croc$country))
+croc %>% summarise_at(c("habitat", "bin_uri", "species_name", "lat", "lon", "country"), n_distinct)
 
 # With the information we gathered, we create a new data frame containing the variables of interest and summarize the new data frame
 croc_simp <- croc[c(8, 20, 22, 47, 48, 55)]
 names(croc_simp)
 summary(croc_simp)
 
-# continuing the information summarization by looking at the number of NA values in each column of the new data frame that were not seen in the summary
-croc_simp %>%
-  count(is.na(bin_uri))
+# Continuing the information summary by looking at the number of NA values in each column of the new data frame that were not seen in the summary
+croc_simp %>% summarise_at(c("bin_uri", "species_name", "country"), ~ sum(is.na(.)))
 
-croc_simp %>%
-  count(is.na(species_name))
-
-croc_simp %>%
-  count(is.na(country))
-
-# Created charts to see if there were any clear distinctions in geographical location based on latitude and longitude. We find a large gap between longitudes that are lower than -60 and higher than -20. This is the separation between information obtained in the Americas and Africa. We then plot the latitude and longitude values together to get the general distribution. 
-
+# Created charts to see if there were any clear distinctions in geographical location based on latitude and longitude. We find a large gap between longitudes that are lower than -60 and higher than -20. This is the separation between information obtained in the Americas and Africa. We then plot the latitude and longitude values together to get the general distribution
 hist(croc_simp$lat)
 hist(croc_simp$lon)
 
@@ -47,6 +38,7 @@ plot(croc$lon, croc$lat)
 
 # Create a table that displays the number of bins associated with each species when NA is removed from the bin data
 view(croc_simp %>%
+       filter(!is.na(bin_uri)) %>%
        group_by(species_name) %>%
        count(species_name, sort = TRUE))
 
@@ -62,28 +54,27 @@ view(croc_simp %>%
        group_by(country) %>%
        count(bin_uri))
 
-# Create 2 new data frames; one with the American data and one with the African data, grouped b country. 
-Amer <- croc_simp[which(croc_simp$country == 'Colombia'),] %>%
-  add_row(croc_simp[which(croc_simp$country == 'Cuba'),] %>%
-  add_row(croc_simp[which(croc_simp$country == 'Mexico'),]) %>%
-  add_row(croc_simp[which(croc_simp$country == 'United States'),]))
 
-Afr <- croc_simp[which(croc_simp$country == c('Cameroon')),] %>%
-  add_row(croc_simp[which(croc_simp$country == c("Cote d'Ivoire")),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Democratic Republic of the Congo')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Egypt')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Gabon')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Gambia')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Ghana')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Guinea')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Madagascar')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Mauritania')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Nigeria')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Republic of the Congo')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Senegal')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('South Africa')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Uganda')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Zimbabwe')),])
+# Now we will create two data frames; one which contains data from America, and another which contains data from Africa
+american_countries <- c("Colombia", "Cuba", "Mexico", "United States")
+african_countries <- c("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
+
+Amer <- croc_simp[FALSE,]
+Afr <- croc_simp[FALSE,]
+
+for(i in 1:nrow(croc_simp)){
+  if(croc_simp[i,]$country %in% american_countries){
+    Amer <- rbind(Amer, croc_simp[i,])
+  }
+  else if(croc_simp[i,]$country %in% african_countries){
+    Afr <- rbind(Afr, croc_simp[i,])
+  }
+  else{
+    next
+  }
+}
+Amer <- Amer[order(Amer$country),]
+Afr <- Afr[order(Afr$country),]
 
 ######################################################
 
