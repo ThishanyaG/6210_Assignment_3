@@ -11,6 +11,52 @@ data("World")
 
 ######################################################
 
+# We will use a function to do the processesing of the American/African data for the plot because they use many of the same steps.
+
+continent_mapping <- function(continent_vector, continent_name, continent_countries){
+  # Get the number of instances for each country 
+  new_col <- continent_vector %>%
+    group_by(country) %>%
+    count(country) %>%
+    filter(!is.na(country))
+  
+  # Get world data for continent of interest                 
+  world_data <- World[which(World$continent == continent_name),]
+  
+  # Continent specific filtering steps
+  if(continent_name == "Africa"){
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Republic of Congo", replacement = "Republic of the Congo")
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Ivory Coast", replacement = "Cote d'Ivoire")
+  }
+  if(continent_name == "North America"){
+    new_col <- rbind(new_col, data.frame(country = "Puerto Rico", n = 0))
+    new_col <- new_col[order(new_col$country),]
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "United States of America", replacement = "United States")
+    get_colombia <- World[which(World$name == "Colombia"),]
+    world_data <- rbind(world_data, get_colombia)
+    }
+  
+  # Split the countries into countries represented in our previous data and countries that are not
+  our_data <- world_data[world_data$sovereignt %in% continent_countries,]
+  other_data <- world_data[!world_data$sovereignt %in% continent_countries,]
+  
+  # Order the countries to match the data in new_col
+  our_data <- our_data[order(our_data$sovereignt),] %>%
+    add_column(Data_Points = NA, .after = "sovereignt")
+  
+  # Add the counts
+  our_data$Data_Points <- new_col$n
+  
+  # Create a matching Data_Points column for the other countries and put 0 in the column
+  other_data <- other_data[order(other_data$sovereignt),] %>%
+    add_column(Data_Points = 0, .after = "sovereignt")
+  
+  # Append and return the dataframes
+  our_data <- rbind(our_data, other_data)
+}
+
+######################################################
+
 # Downloaded on September 26th 2022
 croc <- read_tsv("bold_data.txt")
 
@@ -54,7 +100,6 @@ view(croc_simp %>%
        group_by(country) %>%
        count(bin_uri))
 
-
 # Now we will create two data frames; one which contains data from America, and another which contains data from Africa
 american_countries <- c("Colombia", "Cuba", "Mexico", "United States")
 african_countries <- c("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
@@ -78,56 +123,20 @@ Afr <- Afr[order(Afr$country),]
 
 ######################################################
 
-# Now we will create a map with the data we have for each country
-# Create a data frame that groups the country data and counts the number of data points in each country. This gives us information on which countries have done the most amount of research on this subject based on the information given. 
-new_col <- croc_simp %>%
-  group_by(country) %>%
-  count(country) %>%
-  filter(!is.na(country))
-
-# We now create a new data frame that contains the world data on Africa. We add to this data frame a new column called 'Data_Points' which will house the number of data points each country has. This data frame will be used to create a map of Africa using tmap that visualizes the number of data points each country contributed to the study of Crocodylidae
-Afr_data <- World[which(World$continent == "Africa"),] %>%
-  add_column(Data_Points = NA, .after = "sovereignt")
-
-# We change the name of some of the countries in the new_col dataframe so that they can be compared to the names in the Afr_data data frame. 
-new_col$country <- str_replace(string = new_col$country, pattern = "Republic of the Congo", replacement = "Republic of Congo")
-
-new_col$country <- str_replace(string = new_col$country, pattern = "Cote d'Ivoire", replacement = "Ivory Coast")
-
-# We create a for loop that goes through the countries in Afr_data, and another for loop that goes through the names in new_col. The country names will be compared and, if they are the same, the value of n in new col (the total number of data points) will be added to the Data_Points column in Afr_data
-for(name in Afr_data$sovereignt){
-  for(n in new_col$country){
-    if(name == n){
-      Afr_data$Data_Points[which(Afr_data$sovereignt == name)] <- new_col$n[which(new_col$country == n)]
-    }
-  }
-  
-}
-
-# After physically running through the Data_Points column in Afr_data, it was discovered that the values for 'Democratic Republic of the Congo' ws not inputted. This was a result of the way the name was added to the data frame, so this value was added manually. 
-Afr_data$Data_Points[which(Afr_data$sovereignt == "Democratic Republic of the Congo")] <- new_col$n[which(new_col$country =="Democratic Republic of Congo")]
-
-# Repeat all of the previous steps that created Afr_data, but now for the American data.
-Amer_data <- World[which(World$continent == "North America"),]%>%
-  add_column(Data_Points = NA, .after = "sovereignt")
-
-for(name1 in Amer_data$name){
-  for(n1 in new_col$country){
-    if(name1 == n1){
-      Amer_data$Data_Points[which(Amer_data$name == name1)] <- new_col$n[which(new_col$country == n1)]
-    }
-  }
-  
-}
+# Get the data processed so it is in the right format for mapping
+Afr_data <- continent_mapping(Afr, "Africa", african_countries)
+Amer_data <- continent_mapping(Amer, "North America", american_countries)
 
 # From the 2 newly created data frames, we use tmap to make map shapes and fill the countries using the Data_Points column that was added. These maps are then outputted together using tmap_arrange. 
 afr_plot <- tm_shape(Afr_data, name = Afr$country)+
   tm_borders() +
-  tm_fill("Data_Points")
+  tm_fill("Data_Points", title = "Number of Records", breaks = c(0, 1, 10, 20, 30, 40, 50))
 
 amer_plot <- tm_shape(Amer_data, name = Amer$country)+
   tm_borders() +
-  tm_fill("Data_Points")
+  tm_fill("Data_Points", title = "Number of Records", breaks = c(0, 1, 20, 40, 60, 80))
+
+tmap_mode("view")
 
 tmap_arrange(afr_plot, amer_plot)
 
