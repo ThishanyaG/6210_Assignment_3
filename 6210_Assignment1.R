@@ -100,23 +100,23 @@ hist(croc_simp$lon)
 
 plot(croc$lon, croc$lat)
 
-# # Create a table that displays the number of bins associated with each species when NA is removed from the bin data
-# view(croc_simp %>%
-#        filter(!is.na(bin_uri)) %>%
-#        group_by(species_name) %>%
-#        count(species_name, sort = TRUE))
-# 
-# # Create a table that looks at the total number of data points within each listed country
-# view(croc_simp %>%
-#        group_by(country) %>%
-#        count(country))
-# 
-# # Create a table that looks at the number of bins in each country after removing all NA values in both columns
-# view(croc_simp %>%
-#        filter(!is.na(country)) %>%
-#        filter(!is.na(bin_uri)) %>%
-#        group_by(country) %>%
-#        count(bin_uri))
+# Create a table that displays the number of bins associated with each species when NA is removed from the bin data
+view(croc_simp %>%
+       filter(!is.na(bin_uri)) %>%
+       group_by(species_name) %>%
+       count(species_name, sort = TRUE))
+
+# Create a table that looks at the total number of data points within each listed country
+view(croc_simp %>%
+       group_by(country) %>%
+       count(country))
+
+# Create a table that looks at the number of bins in each country after removing all NA values in both columns
+view(croc_simp %>%
+       filter(!is.na(country)) %>%
+       filter(!is.na(bin_uri)) %>%
+       group_by(country) %>%
+       count(bin_uri))
 
 # Now we will create two data frames; one which contains data from America, and another which contains data from Africa
 american_countries <- set("Colombia", "Cuba", "Mexico", "United States")
