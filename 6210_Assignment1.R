@@ -1,17 +1,27 @@
-# Primary Author:
+# Primary Author: Thishanya Gunasekera
 # Secondary Author: Corinne Jackson
-# Last edited: 2022-11-
+# Last edited: 2022-11-14
 
+# install.packages("tidyverse")
 library(tidyverse)
+# install.packages("vegan")
 library(vegan)
+# install.packages("tmap")
 library(tmap)
+# install.packages("gridExtra")
 library(gridExtra)
+# install.packages("dplyr")
 library(dplyr)
+# install.packages("sets")
+library(sets, include.only = c("set"))
+# install.packages("import")
+import::from(sets, "%e%")
+
 data("World")
 
 ######################################################
 
-# We will use a function to do the processesing of the American/African data for the plot because they use many of the same steps.
+# We will use a function to do the processing of the American/African data for the plot because they use many of the same steps.
 
 continent_mapping <- function(continent_vector, continent_name, continent_countries){
   # Get the number of instances for each country 
@@ -25,18 +35,26 @@ continent_mapping <- function(continent_vector, continent_name, continent_countr
   
   # Continent specific filtering steps
   if(continent_name == "Africa"){
-    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Republic of Congo", replacement = "Republic of the Congo")
-    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Ivory Coast", replacement = "Cote d'Ivoire")
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Republic of Congo", 
+                                         replacement = "Republic of the Congo")
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Ivory Coast", 
+                                         replacement = "Cote d'Ivoire")
   }
   if(continent_name == "North America"){
+    # Because we are using the sovereignt column and Puerto Rico is under the United States, the
+    # we need to manually add it to the new_col dataframe with a value of 0 so that the countries
+    # line up properly with world_data
     new_col <- rbind(new_col, data.frame(country = "Puerto Rico", n = 0))
     new_col <- new_col[order(new_col$country),]
-    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "United States of America", replacement = "United States")
+    # Change the way that the United States string is written so that new_col and world_data match
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "United States of America", 
+                                         replacement = "United States")
+    # Specifically grab the data for Colombia since it will be excluded otherwise
     get_colombia <- World[which(World$name == "Colombia"),]
     world_data <- rbind(world_data, get_colombia)
-    }
+  }
   
-  # Split the countries into countries represented in our previous data and countries that are not
+  # Split the countries from world_data into countries represented in our previous data and countries that are not
   our_data <- world_data[world_data$sovereignt %in% continent_countries,]
   other_data <- world_data[!world_data$sovereignt %in% continent_countries,]
   
@@ -44,7 +62,7 @@ continent_mapping <- function(continent_vector, continent_name, continent_countr
   our_data <- our_data[order(our_data$sovereignt),] %>%
     add_column(Data_Points = NA, .after = "sovereignt")
   
-  # Add the counts
+  # Add the counts from new_col
   our_data$Data_Points <- new_col$n
   
   # Create a matching Data_Points column for the other countries and put 0 in the column
@@ -82,46 +100,47 @@ hist(croc_simp$lon)
 
 plot(croc$lon, croc$lat)
 
-# Create a table that displays the number of bins associated with each species when NA is removed from the bin data
-view(croc_simp %>%
-       filter(!is.na(bin_uri)) %>%
-       group_by(species_name) %>%
-       count(species_name, sort = TRUE))
-
-# Create a table that looks at the total number of data points within each listed country
-view(croc_simp %>%
-       group_by(country) %>%
-       count(country))
-
-# Create a table that looks at the number of bins in each country after removing all NA values in both columns
-view(croc_simp %>%
-       filter(!is.na(country)) %>%
-       filter(!is.na(bin_uri)) %>%
-       group_by(country) %>%
-       count(bin_uri))
+# # Create a table that displays the number of bins associated with each species when NA is removed from the bin data
+# view(croc_simp %>%
+#        filter(!is.na(bin_uri)) %>%
+#        group_by(species_name) %>%
+#        count(species_name, sort = TRUE))
+# 
+# # Create a table that looks at the total number of data points within each listed country
+# view(croc_simp %>%
+#        group_by(country) %>%
+#        count(country))
+# 
+# # Create a table that looks at the number of bins in each country after removing all NA values in both columns
+# view(croc_simp %>%
+#        filter(!is.na(country)) %>%
+#        filter(!is.na(bin_uri)) %>%
+#        group_by(country) %>%
+#        count(bin_uri))
 
 # Now we will create two data frames; one which contains data from America, and another which contains data from Africa
-american_countries <- c("Colombia", "Cuba", "Mexico", "United States")
-african_countries <- c("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
+american_countries <- set("Colombia", "Cuba", "Mexico", "United States")
+african_countries <- set("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
 
 Amer <- croc_simp[FALSE,]
 Afr <- croc_simp[FALSE,]
 
 for(i in 1:nrow(croc_simp)){
-  if(croc_simp[i,]$country %in% american_countries){
+  if(croc_simp[i,]$country %e% american_countries){
     Amer <- rbind(Amer, croc_simp[i,])
   }
-  else if(croc_simp[i,]$country %in% african_countries){
+  else if(croc_simp[i,]$country %e% african_countries){
     Afr <- rbind(Afr, croc_simp[i,])
-  }
-  else{
-    next
   }
 }
 Amer <- Amer[order(Amer$country),]
 Afr <- Afr[order(Afr$country),]
 
 ######################################################
+
+# Convert back to vectors
+american_countries <- as.character(american_countries)
+african_countries <- as.character(african_countries)
 
 # Get the data processed so it is in the right format for mapping
 Afr_data <- continent_mapping(Afr, "Africa", african_countries)
@@ -195,7 +214,7 @@ total_data <- ggplot(data = croc_simp) +
 filtered_croc_simp <- croc_simp %>%
   filter(!is.na(bin_uri)) %>%
   filter(!is.na(country))
-  
+
 filtered_data <- ggplot(data = filtered_croc_simp) +
   geom_point(mapping = aes(x = bin_uri, y = country, colour = species_name), size = 5) +
   scale_colour_manual(values = cbbPalette) +
