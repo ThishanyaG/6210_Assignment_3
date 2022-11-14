@@ -21,8 +21,8 @@ data("World")
 
 ######################################################
 
-# We will use a function to do the processing of the American/African data for the plot because they use many of the same steps.
-
+# We will use a function to do the processing of the American/African data for the plot because they use many 
+# of the same steps.
 continent_mapping <- function(continent_vector, continent_name, continent_countries){
   # Get the number of instances for each country 
   new_col <- continent_vector %>%
@@ -69,7 +69,7 @@ continent_mapping <- function(continent_vector, continent_name, continent_countr
   other_data <- other_data[order(other_data$sovereignt),] %>%
     add_column(Data_Points = 0, .after = "sovereignt")
   
-  # Append and return the dataframes
+  # Append and return the data frames
   our_data <- rbind(our_data, other_data)
 }
 
@@ -122,9 +122,12 @@ view(croc_simp %>%
 american_countries <- set("Colombia", "Cuba", "Mexico", "United States")
 african_countries <- set("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
 
+# Initialize empty vectors that have the same column names as croc_simp but aren't populated with any information
 Amer <- croc_simp[FALSE,]
 Afr <- croc_simp[FALSE,]
 
+# Loop through the rows in croc_simp. If the country is contained in the set of american countries, add it to the
+# Amer data frame. If the country is contained in the set of African countries, add it to the Afr data frame.
 for(i in 1:nrow(croc_simp)){
   if(croc_simp[i,]$country %e% american_countries){
     Amer <- rbind(Amer, croc_simp[i,])
@@ -133,20 +136,23 @@ for(i in 1:nrow(croc_simp)){
     Afr <- rbind(Afr, croc_simp[i,])
   }
 }
+
+# Re-order the dataframes by country
 Amer <- Amer[order(Amer$country),]
 Afr <- Afr[order(Afr$country),]
 
 ######################################################
 
-# Convert back to vectors
+# Convert the sets of the countries into vectors for use in the continent_mapping function
 american_countries <- as.character(american_countries)
 african_countries <- as.character(african_countries)
 
-# Get the data processed so it is in the right format for mapping
+# Get the data processed so it is in the right format for mapping by calling the function
 Afr_data <- continent_mapping(Afr, "Africa", african_countries)
 Amer_data <- continent_mapping(Amer, "North America", american_countries)
 
-# From the 2 newly created data frames, we use tmap to make map shapes and fill the countries using the Data_Points column that was added. These maps are then outputted together using tmap_arrange. 
+# From the 2 newly created data frames, we use tmap to make map shapes and fill the countries using the Data_Points 
+# column that was added. These maps are then outputted together using tmap_arrange.
 afr_plot <- tm_shape(Afr_data, name = Afr$country)+
   tm_borders() +
   tm_fill("Data_Points", title = "Number of Records", breaks = c(0, 1, 10, 20, 30, 40, 50))
@@ -263,4 +269,3 @@ Afr_accum_curve <- plot(AccumCurve_afr, xlab="Countries", ylab= "BIN Richness", 
 
 AccumCurve_amer <- specaccum(amer_spread)
 Amer_accum_curve <- plot(AccumCurve_amer, xlab = "Countries", ylab = "BIN Richness", sub = "American Data Accumulation Curve")
-
