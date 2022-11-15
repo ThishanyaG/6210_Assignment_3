@@ -1,13 +1,81 @@
+# Primary Author: Thishanya Gunasekera
+# Secondary Author: Corinne Jackson
+# Last edited: 2022-11-14
+
+# install.packages("tidyverse")
 library(tidyverse)
+# install.packages("vegan")
 library(vegan)
+# install.packages("tmap")
 library(tmap)
-data("World")
+# install.packages("gridExtra")
 library(gridExtra)
-library(vegan)
+# install.packages("dplyr")
+library(dplyr)
+# install.packages("sets")
+library(sets, include.only = c("set"))
+# install.packages("import")
+import::from(sets, "%e%")
+
+data("World")
 
 ######################################################
 
-# downloaded on September 26th 2022
+# We will use a function to do the processing of the American/African data for the plot because they use many 
+# of the same steps.
+continent_mapping <- function(continent_vector, continent_name, continent_countries){
+  # Get the number of instances for each country 
+  new_col <- continent_vector %>%
+    group_by(country) %>%
+    count(country) %>%
+    filter(!is.na(country))
+  
+  # Get world data for continent of interest                 
+  world_data <- World[which(World$continent == continent_name),]
+  
+  # Continent specific filtering steps
+  if(continent_name == "Africa"){
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Republic of Congo", 
+                                         replacement = "Republic of the Congo")
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "Ivory Coast", 
+                                         replacement = "Cote d'Ivoire")
+  }
+  if(continent_name == "North America"){
+    # Because we are using the sovereignt column and Puerto Rico is under the United States, the
+    # we need to manually add it to the new_col dataframe with a value of 0 so that the countries
+    # line up properly with world_data
+    new_col <- rbind(new_col, data.frame(country = "Puerto Rico", n = 0))
+    new_col <- new_col[order(new_col$country),]
+    # Change the way that the United States string is written so that new_col and world_data match
+    world_data$sovereignt <- str_replace(string = world_data$sovereignt, pattern = "United States of America", 
+                                         replacement = "United States")
+    # Specifically grab the data for Colombia since it will be excluded otherwise
+    get_colombia <- World[which(World$name == "Colombia"),]
+    world_data <- rbind(world_data, get_colombia)
+  }
+  
+  # Split the countries from world_data into countries represented in our previous data and countries that are not
+  our_data <- world_data[world_data$sovereignt %in% continent_countries,]
+  other_data <- world_data[!world_data$sovereignt %in% continent_countries,]
+  
+  # Order the countries to match the data in new_col
+  our_data <- our_data[order(our_data$sovereignt),] %>%
+    add_column(Data_Points = NA, .after = "sovereignt")
+  
+  # Add the counts from new_col
+  our_data$Data_Points <- new_col$n
+  
+  # Create a matching Data_Points column for the other countries and put 0 in the column
+  other_data <- other_data[order(other_data$sovereignt),] %>%
+    add_column(Data_Points = 0, .after = "sovereignt")
+  
+  # Append and return the data frames
+  our_data <- rbind(our_data, other_data)
+}
+
+######################################################
+
+# Downloaded on September 26th 2022
 croc <- read_tsv("bold_data.txt")
 
 # Start with a quick overview of the information available. We start with the names and a summary of the columns in this data frame. 
@@ -16,30 +84,17 @@ summary(croc)
 names(croc)
 
 # We then look at some of the variables of interest. Here we find that there are no recorded values of 'habitat' (all values are NA) so this variable will be discarded
-length(unique(croc$habitat))
-length(unique(croc$bin_uri))
-length(unique(croc$species_name))
-length(unique(croc$lat))
-length(unique(croc$lon))
-length(unique(croc$country))
+croc %>% summarise_at(c("habitat", "bin_uri", "species_name", "lat", "lon", "country"), n_distinct)
 
 # With the information we gathered, we create a new data frame containing the variables of interest and summarize the new data frame
 croc_simp <- croc[c(8, 20, 22, 47, 48, 55)]
 names(croc_simp)
 summary(croc_simp)
 
-# continuing the information summarization by looking at the number of NA values in each column of the new data frame that were not seen in the summary
-croc_simp %>%
-  count(is.na(bin_uri))
+# Continuing the information summary by looking at the number of NA values in each column of the new data frame that were not seen in the summary
+croc_simp %>% summarise_at(c("bin_uri", "species_name", "country"), ~ sum(is.na(.)))
 
-croc_simp %>%
-  count(is.na(species_name))
-
-croc_simp %>%
-  count(is.na(country))
-
-# Created charts to see if there were any clear distinctions in geographical location based on latitude and longitude. We find a large gap between longitudes that are lower than -60 and higher than -20. This is the separation between information obtained in the Americas and Africa. We then plot the latitude and longitude values together to get the general distribution. 
-
+# Created charts to see if there were any clear distinctions in geographical location based on latitude and longitude. We find a large gap between longitudes that are lower than -60 and higher than -20. This is the separation between information obtained in the Americas and Africa. We then plot the latitude and longitude values together to get the general distribution
 hist(croc_simp$lat)
 hist(croc_simp$lon)
 
@@ -47,6 +102,7 @@ plot(croc$lon, croc$lat)
 
 # Create a table that displays the number of bins associated with each species when NA is removed from the bin data
 view(croc_simp %>%
+       filter(!is.na(bin_uri)) %>%
        group_by(species_name) %>%
        count(species_name, sort = TRUE))
 
@@ -62,81 +118,50 @@ view(croc_simp %>%
        group_by(country) %>%
        count(bin_uri))
 
-# Create 2 new data frames; one with the American data and one with the African data, grouped b country. 
-Amer <- croc_simp[which(croc_simp$country == 'Colombia'),] %>%
-  add_row(croc_simp[which(croc_simp$country == 'Cuba'),] %>%
-  add_row(croc_simp[which(croc_simp$country == 'Mexico'),]) %>%
-  add_row(croc_simp[which(croc_simp$country == 'United States'),]))
+# Now we will create two data frames; one which contains data from America, and another which contains data from Africa
+american_countries <- set("Colombia", "Cuba", "Mexico", "United States")
+african_countries <- set("Cameroon", "Cote d'Ivoire", "Democratic Republic of the Congo", "Egypt", "Gabon", "Gambia", "Ghana", "Guinea", "Madagascar", "Mauritania", "Nigeria", "Republic of the Congo", "Senegal", "South Africa", "Uganda", "Zimbabwe")
 
-Afr <- croc_simp[which(croc_simp$country == c('Cameroon')),] %>%
-  add_row(croc_simp[which(croc_simp$country == c("Cote d'Ivoire")),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Democratic Republic of the Congo')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Egypt')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Gabon')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Gambia')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Ghana')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Guinea')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Madagascar')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Mauritania')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Nigeria')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Republic of the Congo')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Senegal')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('South Africa')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Uganda')),]) %>%
-  add_row(croc_simp[which(croc_simp$country == c('Zimbabwe')),])
+# Initialize empty vectors that have the same column names as croc_simp but aren't populated with any information
+Amer <- croc_simp[FALSE,]
+Afr <- croc_simp[FALSE,]
+
+# Loop through the rows in croc_simp. If the country is contained in the set of american countries, add it to the
+# Amer data frame. If the country is contained in the set of African countries, add it to the Afr data frame.
+for(i in 1:nrow(croc_simp)){
+  if(croc_simp[i,]$country %e% american_countries){
+    Amer <- rbind(Amer, croc_simp[i,])
+  }
+  else if(croc_simp[i,]$country %e% african_countries){
+    Afr <- rbind(Afr, croc_simp[i,])
+  }
+}
+
+# Re-order the dataframes by country
+Amer <- Amer[order(Amer$country),]
+Afr <- Afr[order(Afr$country),]
 
 ######################################################
 
-# Now we will create a map with the data we have for each country
-# Create a data frame that groups the country data and counts the number of data points in each country. This gives us information on which countries have done the most amount of research on this subject based on the information given. 
-new_col <- croc_simp %>%
-  group_by(country) %>%
-  count(country) %>%
-  filter(!is.na(country))
+# Convert the sets of the countries into vectors for use in the continent_mapping function
+american_countries <- as.character(american_countries)
+african_countries <- as.character(african_countries)
 
-# We now create a new data frame that contains the world data on Africa. We add to this data frame a new column called 'Data_Points' which will house the number of data points each country has. This data frame will be used to create a map of Africa using tmap that visualizes the number of data points each country contributed to the study of Crocodylidae
-Afr_data <- World[which(World$continent == "Africa"),] %>%
-  add_column(Data_Points = NA, .after = "sovereignt")
+# Get the data processed so it is in the right format for mapping by calling the function
+Afr_data <- continent_mapping(Afr, "Africa", african_countries)
+Amer_data <- continent_mapping(Amer, "North America", american_countries)
 
-# We change the name of some of the countries in the new_col dataframe so that they can be compared to the names in the Afr_data data frame. 
-new_col$country <- str_replace(string = new_col$country, pattern = "Republic of the Congo", replacement = "Republic of Congo")
-
-new_col$country <- str_replace(string = new_col$country, pattern = "Cote d'Ivoire", replacement = "Ivory Coast")
-
-# We create a for loop that goes through the countries in Afr_data, and another for loop that goes through the names in new_col. The country names will be compared and, if they are the same, the value of n in new col (the total number of data points) will be added to the Data_Points column in Afr_data
-for(name in Afr_data$sovereignt){
-  for(n in new_col$country){
-    if(name == n){
-      Afr_data$Data_Points[which(Afr_data$sovereignt == name)] <- new_col$n[which(new_col$country == n)]
-    }
-  }
-  
-}
-
-# After physically running through the Data_Points column in Afr_data, it was discovered that the values for 'Democratic Republic of the Congo' ws not inputted. This was a result of the way the name was added to the data frame, so this value was added manually. 
-Afr_data$Data_Points[which(Afr_data$sovereignt == "Democratic Republic of the Congo")] <- new_col$n[which(new_col$country =="Democratic Republic of Congo")]
-
-# Repeat all of the previous steps that created Afr_data, but now for the American data.
-Amer_data <- World[which(World$continent == "North America"),]%>%
-  add_column(Data_Points = NA, .after = "sovereignt")
-
-for(name1 in Amer_data$name){
-  for(n1 in new_col$country){
-    if(name1 == n1){
-      Amer_data$Data_Points[which(Amer_data$name == name1)] <- new_col$n[which(new_col$country == n1)]
-    }
-  }
-  
-}
-
-# From the 2 newly created data frames, we use tmap to make map shapes and fill the countries using the Data_Points column that was added. These maps are then outputted together using tmap_arrange. 
+# From the 2 newly created data frames, we use tmap to make map shapes and fill the countries using the Data_Points 
+# column that was added. These maps are then outputted together using tmap_arrange.
 afr_plot <- tm_shape(Afr_data, name = Afr$country)+
   tm_borders() +
-  tm_fill("Data_Points")
+  tm_fill("Data_Points", title = "Number of Records", breaks = c(0, 1, 10, 20, 30, 40, 50))
 
 amer_plot <- tm_shape(Amer_data, name = Amer$country)+
   tm_borders() +
-  tm_fill("Data_Points")
+  tm_fill("Data_Points", title = "Number of Records", breaks = c(0, 1, 20, 40, 60, 80))
+
+tmap_mode("view")
 
 tmap_arrange(afr_plot, amer_plot)
 
@@ -195,7 +220,7 @@ total_data <- ggplot(data = croc_simp) +
 filtered_croc_simp <- croc_simp %>%
   filter(!is.na(bin_uri)) %>%
   filter(!is.na(country))
-  
+
 filtered_data <- ggplot(data = filtered_croc_simp) +
   geom_point(mapping = aes(x = bin_uri, y = country, colour = species_name), size = 5) +
   scale_colour_manual(values = cbbPalette) +
@@ -244,4 +269,3 @@ Afr_accum_curve <- plot(AccumCurve_afr, xlab="Countries", ylab= "BIN Richness", 
 
 AccumCurve_amer <- specaccum(amer_spread)
 Amer_accum_curve <- plot(AccumCurve_amer, xlab = "Countries", ylab = "BIN Richness", sub = "American Data Accumulation Curve")
-
